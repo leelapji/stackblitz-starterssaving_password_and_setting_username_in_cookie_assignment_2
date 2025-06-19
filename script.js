@@ -3,92 +3,100 @@ const MAX = 999;
 const pinInput = document.getElementById('pin');
 const sha256HashView = document.getElementById('sha256-hash');
 const resultView = document.getElementById('result');
+let correctPin = null;
 
-// a function to store in the local storage
+// Local storage utilities
 function store(key, value) {
   localStorage.setItem(key, value);
 }
-
-// a function to retrieve from the local storage
 function retrieve(key) {
   return localStorage.getItem(key);
 }
-
-function getRandomArbitrary(min, max) {
-  let cached;
-  cached = Math.random() * (max - min) + min;
-  cached = Math.floor(cached);
-  return cached;
-}
-
-// a function to clear the local storage
 function clear() {
   localStorage.clear();
 }
 
-// a function to generate sha256 hash of the given string
-async function sha256(message) {
-  // encode as UTF-8
-  const msgBuffer = new TextEncoder().encode(message);
-
-  // hash the message
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-
-  // convert ArrayBuffer to Array
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-
-  // convert bytes to hex string
-  const hashHex = hashArray
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return hashHex;
+// Random 3-digit number generator
+function getRandomArbitrary(min, max) {
+  return Math.floor(Math.random() * (max - min) + min);
 }
 
+// SHA256 hashing
+async function sha256(message) {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Display or get the target hash
 async function getSHA256Hash() {
   let cached = retrieve('sha256');
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
 
-  cached = await sha256(getRandomArbitrary(MIN, MAX));
-  store('sha256', cached);
-  return cached;
+  const randomPin = getRandomArbitrary(MIN, MAX).toString();
+  const hash = await sha256(randomPin);
+  store('sha256', hash);
+  store('pin', randomPin); // Store actual pin for testing
+  return hash;
 }
 
+// Main function to display hash
 async function main() {
   sha256HashView.innerHTML = 'Calculating...';
   const hash = await getSHA256Hash();
   sha256HashView.innerHTML = hash;
 }
 
+// Check entered value
 async function test() {
   const pin = pinInput.value;
-
   if (pin.length !== 3) {
-    resultView.innerHTML = '💡 not 3 digits';
+    resultView.innerHTML = '💡 Not 3 digits';
     resultView.classList.remove('hidden');
     return;
   }
 
-  const sha256HashView = document.getElementById('sha256-hash');
-  const hasedPin = await sha256(pin);
+  const hash = sha256HashView.innerHTML;
+  const hashedPin = await sha256(pin);
 
-  if (hasedPin === sha256HashView.innerHTML) {
-    resultView.innerHTML = '🎉 success';
-    resultView.classList.add('success');
+  if (hashedPin === hash) {
+    resultView.innerHTML = `🎉 Success! ${pin} is correct`;
   } else {
-    resultView.innerHTML = '❌ failed';
+    resultView.innerHTML = '❌ Incorrect';
   }
   resultView.classList.remove('hidden');
 }
 
-// ensure pinInput only accepts numbers and is 3 digits long
+// Brute-force decoder
+async function bruteForce() {
+  resultView.innerHTML = '⏳ Cracking...';
+  resultView.classList.remove('hidden');
+
+  const targetHash = sha256HashView.innerHTML;
+
+  for (let i = MIN; i <= MAX; i++) {
+    const testPin = i.toString();
+    const hashed = await sha256(testPin);
+    if (hashed === targetHash) {
+      resultView.innerHTML = `🔓 Found: ${testPin}`;
+      pinInput.value = testPin;
+      return;
+    }
+  }
+
+  resultView.innerHTML = '❌ No match found';
+}
+
+// Only numbers in input
 pinInput.addEventListener('input', (e) => {
   const { value } = e.target;
   pinInput.value = value.replace(/\D/g, '').slice(0, 3);
 });
 
-// attach the test function to the button
+// Attach check and brute force buttons
 document.getElementById('check').addEventListener('click', test);
+document.getElementById('brute').addEventListener('click', bruteForce);
 
+// Run main on load
 main();
